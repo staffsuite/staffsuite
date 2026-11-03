@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<!-- C.Perry -->
+<!-- FCM StaffSuite phone app. Opens StaffSuite full screen with the FCM icon, like an app. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FCM StaffSuite</title>
+<meta name="theme-color" content="#006b67">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="StaffSuite">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<script src="config.js"></script>
+<style>
+  :root { --teal: #006b67; --ink: #1d2433; }
+  html, body { margin: 0; height: 100%; background: var(--teal); overflow: hidden; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; color: #fff;
+         padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left); box-sizing: border-box; }
+  #app { display: block; width: 100%; height: 100%; border: 0; background: #fff; }
+  .cover { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+           background: var(--teal); text-align: center; padding: 24px; box-sizing: border-box; z-index: 5;
+           transition: opacity .35s ease; }
+  .cover.gone { opacity: 0; pointer-events: none; }
+  .cover img { width: min(70vw, 300px); height: auto; }
+  .cover h1 { font-size: 26px; font-weight: 700; margin: 18px 0 6px; letter-spacing: .3px; }
+  .cover p { margin: 6px 0; font-size: 15px; opacity: .9; max-width: 340px; line-height: 1.4; }
+  .dots { margin-top: 22px; display: flex; gap: 8px; }
+  .dots i { width: 9px; height: 9px; border-radius: 50%; background: #fff; opacity: .35; animation: blink 1.2s infinite; }
+  .dots i:nth-child(2) { animation-delay: .2s; } .dots i:nth-child(3) { animation-delay: .4s; }
+  @keyframes blink { 40% { opacity: 1; } }
+  .btn { display: inline-block; margin-top: 16px; padding: 12px 22px; border-radius: 10px; border: 0; font-size: 16px;
+         font-weight: 600; background: #fff; color: var(--teal); text-decoration: none; cursor: pointer; }
+  .btn.ghost { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,.7); }
+  .hide { display: none !important; }
+  /* "Add to Home Screen" tip, only in the browser (never once installed). */
+  #tip { position: fixed; left: 10px; right: 10px; bottom: calc(10px + env(safe-area-inset-bottom)); z-index: 6;
+         background: #fff; color: var(--ink); border-radius: 14px; box-shadow: 0 6px 24px rgba(0,0,0,.25);
+         padding: 14px 44px 14px 14px; font-size: 14px; line-height: 1.4; }
+  #tip b { color: var(--teal); }
+  #tip .x { position: absolute; top: 6px; right: 8px; border: 0; background: none; font-size: 22px; color: #6b7385; cursor: pointer; padding: 4px 8px; }
+  #tip .btn { margin-top: 10px; background: var(--teal); color: #fff; padding: 9px 16px; font-size: 15px; }
+</style>
+</head>
+<body>
+<iframe id="app" title="FCM StaffSuite" allow="clipboard-write; fullscreen"></iframe>
+
+<div id="splash" class="cover">
+  <img src="icons/logo-white.png" alt="FCM Hotels">
+  <h1>StaffSuite</h1>
+  <div class="dots"><i></i><i></i><i></i></div>
+  <p id="slow" class="hide"></p>
+  <a id="openWeb" class="btn ghost hide" target="_blank" rel="noopener"></a>
+</div>
+
+<div id="offline" class="cover hide">
+  <img src="icons/logo-white.png" alt="FCM Hotels">
+  <h1 id="offT"></h1>
+  <p id="offP"></p>
+  <button id="retry" class="btn"></button>
+</div>
+
+<div id="setup" class="cover hide">
+  <img src="icons/logo-white.png" alt="FCM Hotels">
+  <h1>StaffSuite</h1>
+  <p id="setupP"></p>
+</div>
+
+<div id="tip" class="hide">
+  <button class="x" id="tipX" aria-label="Close">&times;</button>
+  <div id="tipText"></div>
+  <button id="installBtn" class="btn hide"></button>
+</div>
+
+<script>
+// C.Perry
+(function () {
+  var es = /^es/i.test(navigator.language || '');
+  var T = es ? {
+    slow: 'Sigue cargando. Si tarda mucho, revise su señal.',
+    openWeb: 'Abrir en el navegador',
+    offT: 'Sin conexión',
+    offP: 'StaffSuite necesita internet para mostrar su horario. Conéctese a Wi-Fi o datos y toque Reintentar.',
+    retry: 'Reintentar',
+    setup: 'Esta app aún no está conectada. Pida a su gerente el enlace correcto.',
+    ios: 'Instale StaffSuite: toque <b>Compartir</b> (el cuadro con la flecha) y luego <b>Agregar a pantalla de inicio</b>.',
+    android: 'Instale StaffSuite en su teléfono para abrirlo como una app.',
+    androidMenu: 'Instale StaffSuite: toque el menú <b>&#8942;</b> y luego <b>Instalar app</b> o <b>Agregar a pantalla principal</b>.',
+    install: 'Instalar'
+  } : {
+    slow: 'Still loading. If this takes a while, check your signal.',
+    openWeb: 'Open in the browser',
+    offT: 'No connection',
+    offP: 'StaffSuite needs the internet to show your schedule. Connect to Wi-Fi or data and tap Try again.',
+    retry: 'Try again',
+    setup: 'This app is not connected yet. Ask your manager for the right link.',
+    ios: 'Get the app: tap <b>Share</b> (the square with the arrow), then <b>Add to Home Screen</b>.',
+    android: 'Put StaffSuite on your phone so it opens like an app.',
+    androidMenu: 'Get the app: tap the <b>&#8942;</b> menu, then <b>Install app</b> or <b>Add to Home screen</b>.',
+    install: 'Install'
+  };
+  var $ = function (id) { return document.getElementById(id); };
+  var url = (window.STAFFSUITE_URL || '').trim();
+  var frame = $('app'), splash = $('splash'), offline = $('offline');
+  $('slow').textContent = T.slow; $('openWeb').textContent = T.openWeb;
+  $('offT').textContent = T.offT; $('offP').textContent = T.offP; $('retry').textContent = T.retry;
+  $('installBtn').textContent = T.install;
+  document.documentElement.lang = es ? 'es' : 'en';
+
+  if (!/^https:\/\/script\.google\.com\//.test(url)) {
+    splash.classList.add('hide'); $('setup').classList.remove('hide'); $('setupP').textContent = T.setup;
+    return;
+  }
+  $('openWeb').href = url;
+
+  var loaded = false, slowTimer;
+  function start() {
+    if (!navigator.onLine) { showOffline(); return; }
+    offline.classList.add('hide'); splash.classList.remove('hide', 'gone');
+    loaded = false;
+    clearTimeout(slowTimer);
+    slowTimer = setTimeout(function () { if (!loaded) { $('slow').classList.remove('hide'); $('openWeb').classList.remove('hide'); } }, 15000);
+    frame.src = url;
+  }
+  function showOffline() { splash.classList.add('hide'); offline.classList.remove('hide'); }
+  frame.addEventListener('load', function () {
+    if (!frame.src) return;
+    loaded = true; clearTimeout(slowTimer);
+    splash.classList.add('gone');
+    setTimeout(function () { splash.classList.add('hide'); }, 400);
+  });
+  $('retry').addEventListener('click', start);
+  window.addEventListener('online', function () { if (!loaded) start(); });
+  window.addEventListener('offline', function () { if (!loaded) showOffline(); });
+  start();
+
+  // Keep the shell's own files on the phone (never schedules).
+  if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js').catch(function () {}); }
+
+  // "Add to Home Screen" tip in the browser only. Hidden once installed or closed.
+  var standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  var closed = false; try { closed = localStorage.getItem('ss_tip_closed') === '1'; } catch (e) {}
+  var ua = navigator.userAgent || '';
+  var isIos = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  var isPhone = isIos || /android/i.test(ua);
+  var deferred = null;
+  function showTip(html, withButton) {
+    if (standalone || closed || !isPhone) return;
+    $('tipText').innerHTML = html;
+    $('installBtn').classList.toggle('hide', !withButton);
+    $('tip').classList.remove('hide');
+  }
+  $('tipX').addEventListener('click', function () {
+    $('tip').classList.add('hide'); closed = true;
+    try { localStorage.setItem('ss_tip_closed', '1'); } catch (e) {}
+  });
+  window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); deferred = e; showTip(T.android, true); });
+  $('installBtn').addEventListener('click', function () {
+    if (!deferred) return;
+    deferred.prompt();
+    deferred.userChoice.then(function () { deferred = null; $('tip').classList.add('hide'); });
+  });
+  window.addEventListener('appinstalled', function () { $('tip').classList.add('hide'); });
+  setTimeout(function () {
+    if (isIos) showTip(T.ios, false);
+    else if (!deferred && /android/i.test(ua)) showTip(T.androidMenu, false);
+  }, 2500);
+})();
+</script>
+</body>
+</html>
